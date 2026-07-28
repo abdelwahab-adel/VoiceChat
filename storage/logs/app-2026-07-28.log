@@ -1,0 +1,38 @@
+[2026-07-28 06:13:30] app.ERROR: Unhandled exception {"message":"App\\Core\\Router::get(): Argument #2 ($handler) must be of type Closure|array, string given, called in C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php on line 134","file":"C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Router.php","line":43,"trace":"#0 C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php(134): App\\Core\\Router->get('/me', 'AuthApiControll...', Array)
+#1 C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Router.php(67): {closure}(Object(App\\Core\\Router))
+#2 C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php(133): App\\Core\\Router->group(Array, Object(Closure))
+#3 C:\\xampp\\htdocs\\pro\\voicechat\\public\\index.php(103): {closure}(Object(App\\Core\\Router))
+#4 {main}"} 
+[2026-07-28 06:15:51] app.INFO: WebSocket server starting on 0.0.0.0:8080  
+[2026-07-28 06:15:51] app.ERROR: Unhandled exception {"message":"Call to undefined function socket_create()","file":"C:\\xampp\\htdocs\\pro\\voicechat\\public\\ws.php","line":112,"trace":"#0 {main}"} 
+[2026-07-28 06:15:58] app.ERROR: Unhandled exception {"message":"App\\Core\\Router::get(): Argument #2 ($handler) must be of type Closure|array, string given, called in C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php on line 134","file":"C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Router.php","line":43,"trace":"#0 C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php(134): App\\Core\\Router->get('/me', 'AuthApiControll...', Array)
+#1 C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Router.php(67): {closure}(Object(App\\Core\\Router))
+#2 C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php(133): App\\Core\\Router->group(Array, Object(Closure))
+#3 C:\\xampp\\htdocs\\pro\\voicechat\\public\\index.php(103): {closure}(Object(App\\Core\\Router))
+#4 {main}"} 
+[2026-07-28 06:15:59] app.ERROR: Unhandled exception {"message":"App\\Core\\Router::get(): Argument #2 ($handler) must be of type Closure|array, string given, called in C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php on line 134","file":"C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Router.php","line":43,"trace":"#0 C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php(134): App\\Core\\Router->get('/me', 'AuthApiControll...', Array)
+#1 C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Router.php(67): {closure}(Object(App\\Core\\Router))
+#2 C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php(133): App\\Core\\Router->group(Array, Object(Closure))
+#3 C:\\xampp\\htdocs\\pro\\voicechat\\public\\index.php(103): {closure}(Object(App\\Core\\Router))
+#4 {main}"} 
+[2026-07-28 06:15:59] app.ERROR: Unhandled exception {"message":"App\\Core\\Router::get(): Argument #2 ($handler) must be of type Closure|array, string given, called in C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php on line 134","file":"C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Router.php","line":43,"trace":"#0 C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php(134): App\\Core\\Router->get('/me', 'AuthApiControll...', Array)
+#1 C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Router.php(67): {closure}(Object(App\\Core\\Router))
+#2 C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php(133): App\\Core\\Router->group(Array, Object(Closure))
+#3 C:\\xampp\\htdocs\\pro\\voicechat\\public\\index.php(103): {closure}(Object(App\\Core\\Router))
+#4 {main}"} 
+[2026-07-28 06:16:08] app.ERROR: Unhandled exception {"message":"App\\Core\\Router::get(): Argument #2 ($handler) must be of type Closure|array, string given, called in C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php on line 134","file":"C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Router.php","line":43,"trace":"#0 C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php(134): App\\Core\\Router->get('/me', 'AuthApiControll...', Array)
+#1 C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Router.php(67): {closure}(Object(App\\Core\\Router))
+#2 C:\\xampp\\htdocs\\pro\\voicechat\\routes\\web.php(133): App\\Core\\Router->group(Array, Object(Closure))
+#3 C:\\xampp\\htdocs\\pro\\voicechat\\public\\index.php(103): {closure}(Object(App\\Core\\Router))
+#4 {main}"} 
+[2026-07-28 06:20:50] app.INFO: WebSocket server starting on 0.0.0.0:8080  
+[2026-07-28 06:20:50] app.INFO: WebSocket server listening on ws://0.0.0.0:8080  
+[2026-07-28 06:29:17] app.INFO: WebSocket server starting on 0.0.0.0:8080  
+[2026-07-28 06:29:17] app.INFO: WebSocket server listening on ws://0.0.0.0:8080  
+[2026-07-28 06:32:36] app.INFO: WebSocket server starting on 0.0.0.0:8080  
+[2026-07-28 06:32:36] app.INFO: WebSocket server listening on ws://0.0.0.0:8080  
+[2026-07-28 06:34:43] app.ERROR: Unhandled exception {"message":"SQLSTATE[42S02]: Base table or view not found: 1146 Table 'voicechat.ws_events' doesn't exist","file":"C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Database.php","line":65,"trace":"#0 C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Database.php(65): PDO->prepare('SELECT * FROM w...')
+#1 C:\\xampp\\htdocs\\pro\\voicechat\\app\\Core\\Database.php(72): App\\Core\\Database->query('SELECT * FROM w...', Array)
+#2 C:\\xampp\\htdocs\\pro\\voicechat\\public\\ws.php(129): App\\Core\\Database->fetchAll('SELECT * FROM w...', Array)
+#3 C:\\xampp\\htdocs\\pro\\voicechat\\public\\ws.php(401): poll_events(0)
+#4 {main}"} 
