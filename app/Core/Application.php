@@ -11,25 +11,26 @@ use App\Services\SessionService;
 use Throwable;
 
 /**
- * Application Bootstrap
+ * Application Bootstrap - Pure PHP Implementation
  * 
  * The heart of the framework. Bootstraps all services,
  * loads configuration, registers globals, and dispatches the request.
  */
 final class Application
 {
-    private static ?self $instance = null;
+    private static ?Application $instance = null;
     private Router $router;
     private Database $db;
     private Request $request;
     private Response $response;
     private array $config = [];
     private array $services = [];
+    private string $rootPath;
 
     /**
      * Singleton accessor for the application instance.
      */
-    public static function getInstance(): self
+    public static function getInstance(): Application
     {
         if (self::$instance === null) {
             throw new \RuntimeException('Application not bootstrapped.');
@@ -40,7 +41,7 @@ final class Application
     /**
      * Boot the application.
      */
-    public static function bootstrap(string $rootPath): self
+    public static function bootstrap(string $rootPath): Application
     {
         if (self::$instance !== null) {
             return self::$instance;
@@ -51,8 +52,9 @@ final class Application
         return $app;
     }
 
-    private function __construct(private readonly string $rootPath)
+    private function __construct(string $rootPath)
     {
+        $this->rootPath = $rootPath;
         $this->loadEnvironment();
         $this->loadConfig();
         $this->setErrorHandling();
@@ -69,7 +71,11 @@ final class Application
     {
         $envFile = $this->rootPath . '/.env';
         if (file_exists($envFile)) {
-            Dotenv::createImmutable($this->rootPath)->safeLoad();
+            try {
+                Dotenv::createImmutable($this->rootPath)->safeLoad();
+            } catch (Throwable $e) {
+                error_log('Failed to load .env: ' . $e->getMessage());
+            }
         }
     }
 
@@ -79,9 +85,21 @@ final class Application
     private function loadConfig(): void
     {
         $configPath = $this->rootPath . '/config';
-        foreach (glob($configPath . '/*.php') as $file) {
+        if (!is_dir($configPath)) {
+            throw new \RuntimeException("Config directory not found: {$configPath}");
+        }
+
+        $files = glob($configPath . '/*.php');
+        if ($files === false) {
+            throw new \RuntimeException("Failed to load config files from {$configPath}");
+        }
+
+        foreach ($files as $file) {
             $key = basename($file, '.php');
-            $this->config[$key] = require $file;
+            $config = require $file;
+            if (is_array($config)) {
+                $this->config[$key] = $config;
+            }
         }
     }
 
@@ -90,32 +108,68 @@ final class Application
      */
     private function setErrorHandling(): void
     {
-        $debug = (bool) ($_ENV['APP_DEBUG'] ?? false);
+        $debug = (bool)($_ENV['APP_DEBUG'] ?? false);
 
         set_exception_handler(function (Throwable $e) use ($debug): void {
-            $this->services['logger']->error('Unhandled exception', [
+            $this->handleException($e, $debug);
+        });
+
+        set_error_handler(function (int $severity, string $message, string $file, int $line): bool {
+            if (!(error_reporting() & $severity)) {
+                return false;
+            }
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+
+        register_shutdown_function(function (): void {
+            $error = error_get_last();
+            if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+                $this->handleShutdownError($error);
+            }
+        });
+    }
+
+    /**
+     * Handle exceptions uniformly.
+     */
+    private function handleException(Throwable $e, bool $debug): void
+    {
+        $logService = $this->services['logger'] ?? null;
+        if ($logService instanceof LoggerService) {
+            $logService->error('Unhandled exception', [
                 'message' => $e->getMessage(),
                 'file'    => $e->getFile(),
                 'line'    => $e->getLine(),
                 'trace'   => $e->getTraceAsString(),
             ]);
+        }
 
-            if (!headers_sent()) {
-                http_response_code(500);
-                if ($debug) {
-                    echo '<pre style="text-align:left">'
-                       . htmlspecialchars((string) $e, ENT_QUOTES, 'UTF-8')
-                       . '</pre>';
-                } else {
-                    echo 'Internal Server Error';
-                }
+        if (!headers_sent()) {
+            http_response_code(500);
+            if ($debug) {
+                echo '<pre style="text-align:left;background:#f5f5f5;padding:20px;border-radius:4px;">';
+                echo htmlspecialchars((string)$e, ENT_QUOTES, 'UTF-8');
+                echo '</pre>';
+            } else {
+                echo 'Internal Server Error';
             }
-        });
+        }
+    }
 
-        set_error_handler(function (int $severity, string $message, string $file, int $line): bool {
-            if (!(error_reporting() & $severity)) return false;
-            throw new \ErrorException($message, 0, $severity, $file, $line);
-        });
+    /**
+     * Handle fatal errors during shutdown.
+     */
+    private function handleShutdownError(array $error): void
+    {
+        $logService = $this->services['logger'] ?? null;
+        if ($logService instanceof LoggerService) {
+            $logService->error('Fatal error', $error);
+        }
+
+        if (!headers_sent()) {
+            http_response_code(500);
+            echo 'Fatal Server Error';
+        }
     }
 
     /**
@@ -126,22 +180,22 @@ final class Application
         // Logger
         $this->services['logger'] = new LoggerService(
             $this->rootPath . '/storage/logs',
-            $_ENV['LOG_LEVEL'] ?? 'debug'
+            (string)($_ENV['LOG_LEVEL'] ?? 'debug')
         );
 
         // Cache
         $this->services['cache'] = new CacheService(
             $this->rootPath . '/storage/cache',
-            (int) ($_ENV['CACHE_TTL'] ?? 3600)
+            (int)($_ENV['CACHE_TTL'] ?? 3600)
         );
 
         // Session
         $this->services['session'] = new SessionService([
-            'name'        => $_ENV['SESSION_NAME'] ?? 'VC_SESSION',
-            'lifetime'    => (int) ($_ENV['SESSION_LIFETIME'] ?? 7200),
-            'secure'      => (bool) ($_ENV['SESSION_SECURE_COOKIE'] ?? false),
-            'http_only'   => (bool) ($_ENV['SESSION_HTTP_ONLY'] ?? true),
-            'same_site'   => $_ENV['SESSION_SAME_SITE'] ?? 'Lax',
+            'name'        => (string)($_ENV['SESSION_NAME'] ?? 'VC_SESSION'),
+            'lifetime'    => (int)($_ENV['SESSION_LIFETIME'] ?? 7200),
+            'secure'      => (bool)($_ENV['SESSION_SECURE_COOKIE'] ?? false),
+            'http_only'   => (bool)($_ENV['SESSION_HTTP_ONLY'] ?? true),
+            'same_site'   => (string)($_ENV['SESSION_SAME_SITE'] ?? 'Lax'),
         ]);
 
         // Database
@@ -157,22 +211,42 @@ final class Application
         try {
             $this->router->dispatch();
         } catch (Throwable $e) {
-            $this->services['logger']->error('Dispatch error', ['error' => $e->getMessage()]);
+            $logService = $this->services['logger'] ?? null;
+            if ($logService instanceof LoggerService) {
+                $logService->error('Dispatch error', ['error' => $e->getMessage()]);
+            }
             $this->response->setStatusCode(500)->json([
                 'error'   => 'Server Error',
-                'message' => (bool) ($_ENV['APP_DEBUG'] ?? false) ? $e->getMessage() : 'Internal error',
+                'message' => (bool)($_ENV['APP_DEBUG'] ?? false) ? $e->getMessage() : 'Internal error',
             ]);
         }
     }
 
-    public function getRouter(): Router { return $this->router; }
-    public function getDb(): Database { return $this->db; }
-    public function getRequest(): Request { return $this->request; }
-    public function getResponse(): Response { return $this->response; }
+    public function getRouter(): Router
+    {
+        return $this->router;
+    }
+
+    public function getDb(): Database
+    {
+        return $this->db;
+    }
+
+    public function getRequest(): Request
+    {
+        return $this->request;
+    }
+
+    public function getResponse(): Response
+    {
+        return $this->response;
+    }
+
     public function getConfig(string $key, mixed $default = null): mixed
     {
         return $this->config[$key] ?? $default;
     }
+
     public function getService(string $name): mixed
     {
         return $this->services[$name] ?? null;
@@ -182,5 +256,9 @@ final class Application
     {
         $this->services[$name] = $instance;
     }
-    public function rootPath(): string { return $this->rootPath; }
+
+    public function getRootPath(): string
+    {
+        return $this->rootPath;
+    }
 }

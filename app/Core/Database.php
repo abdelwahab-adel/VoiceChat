@@ -11,7 +11,7 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * PDO Database wrapper.
+ * PDO Database Wrapper - Pure PHP Implementation
  * 
  * Provides a thin, secure abstraction over PDO with helpers
  * for query building, transactions, and result hydration.
@@ -20,6 +20,7 @@ final class Database
 {
     private PDO $pdo;
     private array $config;
+    private int $transactionDepth = 0;
 
     public function __construct(array $config)
     {
@@ -29,22 +30,8 @@ final class Database
 
     private function connect(): void
     {
-        $dsn = sprintf(
-            '%s:host=%s;port=%d;dbname=%s;charset=%s',
-            $this->config['driver'] ?? 'mysql',
-            $this->config['host'] ?? '127.0.0.1',
-            (int) ($this->config['port'] ?? 3306),
-            $this->config['database'] ?? 'voicechat',
-            $this->config['charset'] ?? 'utf8mb4'
-        );
-
-        $options = [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false,
-            PDO::ATTR_PERSISTENT         => false,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES " . ($this->config['charset'] ?? 'utf8mb4'),
-        ];
+        $dsn = $this->buildDsn();
+        $options = $this->getPdoOptions();
 
         try {
             $this->pdo = new PDO(
@@ -54,22 +41,60 @@ final class Database
                 $options
             );
         } catch (PDOException $e) {
-            throw new RuntimeException('Database connection failed: ' . $e->getMessage(), 500, $e);
+            throw new RuntimeException(
+                'Database connection failed: ' . $e->getMessage(),
+                (int)$e->getCode(),
+                $e
+            );
         }
     }
 
-    public function pdo(): PDO { return $this->pdo; }
+    private function buildDsn(): string
+    {
+        $driver = $this->config['driver'] ?? 'mysql';
+        $host = $this->config['host'] ?? '127.0.0.1';
+        $port = (int)($this->config['port'] ?? 3306);
+        $database = $this->config['database'] ?? 'voicechat';
+        $charset = $this->config['charset'] ?? 'utf8mb4';
+
+        return "{$driver}:host={$host};port={$port};dbname={$database};charset={$charset}";
+    }
+
+    private function getPdoOptions(): array
+    {
+        return [
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES   => false,
+            PDO::ATTR_PERSISTENT         => false,
+            PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES ' . ($this->config['charset'] ?? 'utf8mb4'),
+        ];
+    }
+
+    public function pdo(): PDO
+    {
+        return $this->pdo;
+    }
 
     public function query(string $sql, array $bindings = []): PDOStatement
     {
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($this->sanitize($bindings));
+        if (!$stmt) {
+            throw new RuntimeException('Failed to prepare statement');
+        }
+
+        $sanitized = $this->sanitizeBindings($bindings);
+        if (!$stmt->execute($sanitized)) {
+            throw new RuntimeException('Query execution failed: ' . implode(', ', $stmt->errorInfo()));
+        }
+
         return $stmt;
     }
 
     public function fetchAll(string $sql, array $bindings = []): array
     {
-        return $this->query($sql, $bindings)->fetchAll();
+        $result = $this->query($sql, $bindings)->fetchAll();
+        return $result === false ? [] : $result;
     }
 
     public function fetchOne(string $sql, array $bindings = []): ?array
@@ -90,14 +115,16 @@ final class Database
         if (empty($data)) {
             throw new InvalidArgumentException('Insert data cannot be empty');
         }
+
         $columns = array_keys($data);
         $placeholders = array_map(fn($c) => ':' . $c, $columns);
         $sql = sprintf(
             'INSERT INTO %s (%s) VALUES (%s)',
-            $this->quoteIdent($table),
-            implode(',', array_map([$this, 'quoteIdent'], $columns)),
+            $this->quoteIdentifier($table),
+            implode(',', array_map([$this, 'quoteIdentifier'], $columns)),
             implode(',', $placeholders)
         );
+
         $this->query($sql, $data);
         return $this->pdo->lastInsertId();
     }
@@ -107,53 +134,78 @@ final class Database
         if (empty($data)) {
             throw new InvalidArgumentException('Update data cannot be empty');
         }
+
         $set = [];
         foreach (array_keys($data) as $col) {
-            $set[] = $this->quoteIdent($col) . ' = :set_' . $col;
+            $set[] = $this->quoteIdentifier($col) . ' = :set_' . $col;
         }
+
         $bindings = [];
-        foreach ($data as $k => $v) $bindings['set_' . $k] = $v;
+        foreach ($data as $k => $v) {
+            $bindings['set_' . $k] = $v;
+        }
         $bindings = array_merge($bindings, $whereBindings);
 
         $sql = sprintf(
             'UPDATE %s SET %s WHERE %s',
-            $this->quoteIdent($table),
+            $this->quoteIdentifier($table),
             implode(', ', $set),
             $where
         );
+
         return $this->query($sql, $bindings)->rowCount();
     }
 
     public function delete(string $table, string $where, array $bindings = []): int
     {
-        $sql = sprintf('DELETE FROM %s WHERE %s', $this->quoteIdent($table), $where);
+        $sql = sprintf(
+            'DELETE FROM %s WHERE %s',
+            $this->quoteIdentifier($table),
+            $where
+        );
         return $this->query($sql, $bindings)->rowCount();
     }
 
     public function count(string $table, string $where = '1=1', array $bindings = []): int
     {
-        $sql = sprintf('SELECT COUNT(*) FROM %s WHERE %s', $this->quoteIdent($table), $where);
-        return (int) $this->fetchValue($sql, $bindings);
+        $sql = sprintf(
+            'SELECT COUNT(*) FROM %s WHERE %s',
+            $this->quoteIdentifier($table),
+            $where
+        );
+        $count = $this->fetchValue($sql, $bindings);
+        return (int)$count;
     }
 
     public function transaction(callable $callback): mixed
     {
-        $this->pdo->beginTransaction();
+        $this->transactionDepth++;
+        if ($this->transactionDepth === 1) {
+            $this->pdo->beginTransaction();
+        }
+
         try {
             $result = $callback($this);
-            $this->pdo->commit();
+            if ($this->transactionDepth === 1) {
+                $this->pdo->commit();
+            }
             return $result;
-        } catch (\Throwable $e) {
-            if ($this->pdo->inTransaction()) {
+        } catch (Throwable $e) {
+            if ($this->transactionDepth === 1 && $this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
             throw $e;
+        } finally {
+            $this->transactionDepth--;
         }
     }
 
-    public function lastInsertId(): string { return $this->pdo->lastInsertId(); }
+    public function lastInsertId(): string
+    {
+        return $this->pdo->lastInsertId();
+    }
 
-    public function quoteIdent(string $identifier): string
+    public function quoteIdentifier(string $identifier): string
     {
         if (str_contains($identifier, '.') || str_contains($identifier, ' ')) {
             return implode('.', array_map(
@@ -164,13 +216,17 @@ final class Database
         return '`' . str_replace('`', '``', $identifier) . '`';
     }
 
-    private function sanitize(array $bindings): array
+    private function sanitizeBindings(array $bindings): array
     {
         $out = [];
         foreach ($bindings as $k => $v) {
-            if (is_bool($v))      $v = (int) $v;
-            elseif (is_null($v))  $v = null;
-            elseif (is_array($v) || is_object($v)) $v = json_encode($v, JSON_UNESCAPED_UNICODE);
+            if (is_bool($v)) {
+                $v = (int)$v;
+            } elseif (is_null($v)) {
+                $v = null;
+            } elseif (is_array($v) || is_object($v)) {
+                $v = json_encode($v, JSON_UNESCAPED_UNICODE);
+            }
             $out[$k] = $v;
         }
         return $out;
